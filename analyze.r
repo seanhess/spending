@@ -1,4 +1,4 @@
-# this is an r file
+library(tidyverse)
 
 
 # input = "2020-04-29-exported_transactions.csv"
@@ -14,7 +14,10 @@ clean = function(frame) {
 }
 
 load = function(inp) {
-  clean(read.csv(inp, header=T, sep=",", colClasses=c("character", NA, NA, NA, "factor", NA, "character", "character", "factor", "factor", "character", "character")))
+  clean(read.csv(inp, header=T, sep=",", colClasses=c("character", NA, NA, NA, "factor", NA, "character", "character", "factor", "factor", "character", "character"))) %>%
+    mutate(
+      Date = as.Date(Date),
+    )
 }
 
 output = function(n, name, ts) {
@@ -35,16 +38,16 @@ budget = function(cat) {
     "Basics"
   } else if (is.element(cat, fun)) {
     "Fun"
-  } else if (is.element(cat, ignore)) {
-    "Ignore"
-  } else if (is.element(cat, spend)) {
-    "Spend"
-  } else if (is.element(cat, home)) {
-    "Home"
-  } else if (is.element(cat, car)) {
-    "Car"
   } else if (is.element(cat, health)) {
     "Health"
+  } else if (is.element(cat, home)) {
+    "Home"
+  } else if (is.element(cat, spend)) {
+    "Spend"
+  } else if (is.element(cat, emergencies)) {
+    "Emergency"
+  } else if (is.element(cat, ignore)) {
+    "Ignore"
   } else {
     ""
   }
@@ -56,6 +59,9 @@ basics = c("Groceries" , "Auto Insurance" , "Gas" , "Memberships" , "Tuition & F
 # FUN
 fun = c("Fast Food" ,"Alcohol & Bars" ,"Restaurants" ,"Other Food & Drink" ,"Other Sports & Fitness" ,"Business Services")
 
+# EMERGENCIES
+emergencies = c("Auto Services", "Other Health & Medical", "Auto Supplies", "Parking Tickets")
+
 # IGNORE
 ignore = c("Money Transfers" , "Other Income" , "Credit Card Payment" , "Interest" , "ATM Fees")
 
@@ -65,11 +71,8 @@ spend = c("Sporting Goods" ,"Books" ,"Music" ,"Tours & Cruises" ,"Random Fun" ,"
 # HOME
 home = c("Repairs & Improvement", "Hotels", "Other Home", "Furnishings")
 
-# CAR
-car = c("Auto Services", "Auto Supplies", "Parking Tickets")
-
 # HEALTH
-health = c("Eyes", "Other Health & Medical", "Pharmacies")
+health = c("Eyes", "Pharmacies")
 
 
 addBudget = function(ts) {
@@ -80,11 +83,30 @@ groupBudget = function(ts) {
   ts[order(ts$Budget, ts$Amount),]
 }
 
-summary = function(n, ts) {
-  sum1 = aggregate(Amount ~ Budget, ts, sum)
-  sum2 = transform(sum1, Amount1mo = round(Amount / n))
-  sum3 = transform(sum2, Amount12mo = round(Amount / n * 12))
-  sum3
+toDate = function(ds) {
+  as.Date(ds)
+}
+
+addMonth = function(data) {
+  mutate(data, Month = format(Date, "%Y-%m"))
+}
+
+# Summary by month by Budget
+summary = function(ts) {
+  ts %>%
+    addMonth() %>%
+    group_by(Month, Budget) %>%
+    summarize(
+       Total = sum(Amount)
+       # n = n()
+    ) %>%
+    filter(Budget != "Ignore") %>%
+    pivot_wider(names_from = Budget, values_from = Total)
+
+  # sum1 = aggregate(Amount ~ Budget, ts, sum)
+  # sum2 = transform(sum1, Amount1mo = round(Amount / n))
+  # sum3 = transform(sum2, Amount12mo = round(Amount / n * 12))
+  # sum3
 }
 
 
