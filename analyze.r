@@ -14,15 +14,32 @@ clean = function(frame) {
 }
 
 load = function(inp) {
-  clean(read.csv(inp, header=T, sep=",", colClasses=c("character", NA, NA, NA, "factor", NA, "character", "character", "factor", "factor", "character", "character"))) %>%
+  read.csv(inp, stringsAsFactors=FALSE) %>%
+    select(Date, Description, Category, Amount) %>%
     mutate(
       Date = as.Date(Date),
+      Source = "Simple"
     )
 }
 
-output = function(n, name, ts) {
+loadCapitalOne = function(inp) {
+  data = read.csv(inp, stringsAsFactors = FALSE)
+  data[is.na(data)] <- 0
+  data %>%
+    mutate(
+      Date = as.Date(Posted.Date),
+      Amount = Credit - Debit,
+      Source = "Capital One",
+    ) %>%
+    select(Date, Description, Category, Amount, Source) %>%
+    # Remove payments, and that one collision because it was reimbursed
+    filter(Category != "Payment/Credit", Description != "VALLEY COLLISION VC 1")
+}
+
+
+output = function(ts, name) {
   write.csv(groupBudget(ts), paste(name, "output.csv", sep="-"))
-  write.csv(summary(n, ts), paste(name, "summary.csv", sep="-"))
+  write.csv(summary(ts), paste(name, "summary.csv", sep="-"), na="0")
 }
 
 budget = function(cat) {
@@ -49,34 +66,53 @@ budget = function(cat) {
   } else if (is.element(cat, ignore)) {
     "Ignore"
   } else {
-    ""
+    "_"
+  }
+}
+
+budgetCapOne = function(cat, desc) {
+  if (grepl("AIRBNB", desc, fixed=TRUE)) {
+    "Home"
+  } else if (grepl("JT AUTOMOTIVE", desc, fixed=TRUE)) {
+    "Emergency"
+  } else if (grepl("SMITHS", desc, fixed=TRUE)) {
+    "Basics"
+  } else if (cat == "Dining") {
+    "Fun"
+  } else {
+    "Spend"
   }
 }
 
 
-basics = c("Groceries" , "Auto Insurance" , "Gas" , "Memberships" , "Tuition & Fees" , "Gas & Fuel" , "Storage" , "Online Services" , "Cash" , "Clothing" , "Parking & Tolls" , "Public Transit" , "Bicycle")
+
+basics = c("Groceries" , "Auto Insurance" , "Gas" , "Memberships" , "Tuition & Fees" , "Gas & Fuel" ,  "Online Services" , "Cash" , "Clothing" , "Parking & Tolls" , "Public Transit" , "Bicycle", "Software", "Hair")
 
 # FUN
-fun = c("Fast Food" ,"Alcohol & Bars" ,"Restaurants" ,"Other Food & Drink" ,"Other Sports & Fitness" ,"Business Services")
+fun = c("Fast Food" ,"Alcohol & Bars" ,"Restaurants" ,"Other Food & Drink" ,"Other Sports & Fitness" ,"Business Services", "Coffee & Tea", "Taxis")
 
 # EMERGENCIES
-emergencies = c("Auto Services", "Other Health & Medical", "Auto Supplies", "Parking Tickets")
+emergencies = c("Auto Services", "Parking Tickets", "Doctor", "Care Facilities")
 
 # IGNORE
 ignore = c("Money Transfers" , "Other Income" , "Credit Card Payment" , "Interest" , "ATM Fees")
 
 # SPEND
-spend = c("Sporting Goods" ,"Books" ,"Music" ,"Tours & Cruises" ,"Random Fun" ,"Hobbies" ,"Camping" ,"Activities")
+spend = c("Sporting Goods" ,"Books" ,"Music" ,"Tours & Cruises" ,"Random Fun" ,"Hobbies" ,"Camping" ,"Activities", "Auto Supplies")
 
 # HOME
-home = c("Repairs & Improvement", "Hotels", "Other Home", "Furnishings")
+home = c("Repairs & Improvement", "Hotels", "Other Home", "Furnishings", "Storage")
 
 # HEALTH
-health = c("Eyes", "Pharmacies")
+health = c("Eyes", "Pharmacies", "Other Health & Medical", "Dentist", "Health Insurance")
 
 
 addBudget = function(ts) {
-  transform(ts, Budget = sapply(Category, budget))
+  mutate(ts, Budget = as.character(sapply(Category, budget)))
+}
+
+addBudgetCapOne = function(ts) {
+  mutate(ts, Budget = as.character(mapply(budgetCapOne, Category, Description)))
 }
 
 groupBudget = function(ts) {
@@ -101,7 +137,7 @@ summary = function(ts) {
        # n = n()
     ) %>%
     filter(Budget != "Ignore") %>%
-    pivot_wider(names_from = Budget, values_from = Total)
+    pivot_wider(names_from = Budget, values_from = Total, values_fill = list(Total = 0))
 
   # sum1 = aggregate(Amount ~ Budget, ts, sum)
   # sum2 = transform(sum1, Amount1mo = round(Amount / n))

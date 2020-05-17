@@ -1,0 +1,94 @@
+---
+title: "Spending Analysis"
+output: html_notebook
+---
+
+Initial setup, must run this once
+
+```{r}
+source("analyze.r")
+simple = addBudget(load("2020-05-06-exported_transactions.csv"))
+cap = addBudgetCapOne(loadCapitalOne("capital-one-sep-apr.csv"))
+data = union_all(simple, cap)
+
+count(data)
+```
+
+Add budgets to the transactions. We use some simple categories: Basics, Home, Fun, Emergency, Spend, Ignore
+
+```{r}
+head(data)
+```
+
+
+Group together and examine
+
+```{r}
+grouped = groupBudget(data)
+basics = grouped %>% filter(Budget == "Basics")
+fun = grouped %>% filter(Budget == "Fun")
+home = grouped %>% filter(Budget == "Home")
+spend = grouped %>% filter(Budget == "Spend")
+emergency = grouped %>% filter(Budget == "Emergency")
+basics
+fun
+home
+spend
+emergency
+```
+
+
+
+
+Finally, let's view a summary of all the expenses
+
+```{r}
+summary(data)
+```
+
+Averages!
+
+```{r}
+avgs = summary(data) %>% ungroup() %>%
+  summarize(
+    Basics = -round(mean(Basics)),
+    Health = -round(mean(Health)),
+    Fun = -round(mean(Fun)),
+    Emergency = -round(mean(Emergency)),
+    Home = -round(mean(Home)),
+    Spend = -round(mean(Spend)),
+  )
+avgs
+```
+
+
+Now let's get a look at what goes into each one
+
+```{r}
+b = select(avgs, Basics, Health, Fun)
+report = tribble(
+  ~cat, ~amount,
+  "Living", sum(b) * 12,
+  "Emergency", avgs$Emergency * 12,
+  "Home", avgs$Home * 12,
+  "Spend", avgs$Spend * 12
+)
+report
+```
+
+
+
+Total without Home
+```{r}
+a = filter(report, cat != "Home")$amount %>% sum()
+a
+a * 25
+```
+
+Total
+```{r}
+report$amount %>% sum()
+```
+
+
+

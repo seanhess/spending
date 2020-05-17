@@ -1,0 +1,237 @@
+---
+title: "Time Value Money"
+output: html_notebook
+---
+
+
+## Inputs
+
+
+```{r}
+library(FinCal)
+
+cape = 26.40
+bonds = 0.015
+inflation = 0.0145
+
+age.max = 100
+age.now = 38
+years.life = age.max-age.now
+years.kids = 10
+```
+
+## Rates
+
+* https://www.morningstar.com/etfs/arcx/tfi/quote
+* https://fred.stlouisfed.org/series/T5YIFRM
+* https://www.multpl.com/shiller-pe
+
+```{r}
+# real composite rate, based on 80/20 allocation
+# I'm counting my extra cash as bonds, because they have the same yield right now
+alloc_long = 0.9
+rate_long = 1/cape*alloc_long + (bond-inflation)*(1-alloc_long)
+
+# betterment recommends 50/50 for a 5y purchase (not sure if that's the same as income over 10y)
+alloc_short = 0.5
+rate_short = 1/cape*(alloc_short) + (bond-inflation)*(1-alloc_short)
+
+rates = data.frame()
+rates.inflation = 0.0145
+rates.real = rate_long
+rates.real_short = rate_short
+rates.bonds = bonds
+
+rates["inflation", "rate"] = rates.inflation
+rates["bonds", "rate"] =  rates.bonds
+rates["stocks", "rate"] =  1/cape
+rates["real long", "rate"] =  rates.real
+rates["real short", "rate"] =  rates.real_short
+rates
+```
+
+
+
+## Present Value - Assets
+
+Social Security - My estimated benefit
+
+* https://docs.google.com/spreadsheets/d/1X9DyVoeap0Puf6Jg5Hrd4GA-W5a96Xtceb-LJxP5WPM/edit#gid=5672503
+
+```{r}
+
+ss = data.frame(age = c(66,70), amount = c(20865, 25872), row.names = c("Full","Max"))
+# I'm not sure how to calculate this, I lifted it from the bogleheads TVM spreadsheet
+ss.pv = 171901
+ss
+```
+
+Net Cash
+```{r}
+cash = data.frame()
+cash["current", "amount"] = 20000+46000
+cash["income","amount"] = 170000
+cash["sell","amount"] = 17000
+cash["taxes","amount"] = -44000
+cash["2020", "amount"] = -15000
+cash
+```
+
+Investments
+
+```{r}
+betterment = 916369
+
+# currently invested 90/10 in betterment
+invest = data.frame()
+invest["betterment", "stocks"] = round(0.9*betterment)
+invest["betterment", "bonds"] = round(0.1*betterment)
+invest["hsa", "stocks"] = 7000
+invest["hsa", "bonds"] = 0
+
+# private shares - should keep up with inflation. I'll take it's current value
+invest["private", "stocks"] = 50000
+invest["private", "bonds"] = 0
+invest
+
+
+```
+
+
+
+## Present Value - Liabilities
+
+Extra Housing: 10 years estimate of how much extra housing I might need. Ages 13, 11, and 7. Only one child left after 7 years. 
+
+```{r}
+housing_extra = 12000 * c(1,1,1,1,1,1,1,1,1,1)
+housing_extra.pv = pv.uneven(rates.real_short, housing_extra)
+housing_extra.pv
+```
+
+
+Child support
+
+```{r}
+cs_payments = function(amount, max, years) {
+  c(rep(amount, times=years), rep(0, times=max-years))
+}
+
+per_kid = (800/3)*12
+kid13 = cs_payments(per_kid, 10, 5)
+kid11 = cs_payments(per_kid, 10, 7)
+kid07 = cs_payments(per_kid, 10, 10)
+child_support = kid13 + kid11 + kid07
+# child_support = c(rep(9600, times=5), rep(0, times=5))
+child_support
+child_support.pv = pv.uneven(rates.real_short, child_support)
+child_support.pv
+```
+
+Budgets
+
+```{r}
+budget = data.frame()
+budget["living", "amount"] = 24000
+budget["health","amount"] = 2000
+budget["spend","amount"] = 10000
+budget["home","amount"] = 5000
+budget.pv = pv.annuity(rates.real, years.life, sum(budget$amount))
+budget
+```
+
+```{r}
+liabilities = data.frame()
+liabilities["child support", "pv"] = child_support.pv
+liabilities["housing extra", "pv"] = housing_extra.pv
+liabilities["income", "pv"] = budget.pv
+liabilities
+```
+
+
+# Analysis, withdrawals, and funded ratio
+
+Withdrawal Rates. Separate pools for kid liabilities because they last 10y.
+
+```{r}
+rates.income = pmt(rates.real, years.life, -1, 0, 1)
+rates.kids = pmt(rates.real, years.kids, -1, 0, 1)
+data.frame(
+  rate = c(rates.income, rates.kids),
+  row.names = c("Income", "Kids")
+)
+```
+
+
+Withdrawal Amounts for Income and Kids.
+
+* [Funded Ratio](https://www.bogleheads.org/forum/viewtopic.php?t=219878)
+
+```{r}
+
+# all assets vs liabilities
+total.assets = sum(invest$stocks) + sum(invest$bonds) + sum(cash$amount) + ss.pv
+total.liabilities = sum(liabilities$pv)
+
+# if you set aside kid liabilities and deplete them within 10y
+kids.liabilities = child_support.pv + housing_extra.pv
+kids.assets = -kids.liabilities
+kids.withdrawal = rates.kids * kids.assets
+kids.funded = kids.assets / -kids.liabilities
+
+# remaining assets support income for life
+income.assets = total.assets + kids.liabilities
+income.liabilities = budget.pv
+income.withdrawal = rates.income * income.assets
+income.funded = income.assets / -income.liabilities
+
+data.frame(
+  "assets" = c(kids.assets, income.assets),
+  "liabilities" = c(kids.liabilities, income.liabilities),
+  "withdrawal" = c(kids.withdrawal, income.withdrawal),
+  "funded ratio" = c(kids.funded, income.funded),
+  row.names = c("Next 10y Kid Expenses ", "Lifetime Income")
+)
+```
+
+
+
+## Allocation
+
+```{r}
+# this shows 75/25 right now, including cash as bonds, I need to increase to 80/20 to get enough growth
+
+stock_amount = sum(invest$stocks)
+bond_amount = sum(invest$bonds) + sum(cash$amount)
+total_amount = stock_amount + bond_amount
+
+short.total = kids.assets
+short.stocks =short.total * alloc_short
+short.bonds = short.total * (1-alloc_short)
+
+# includes ss, so remove from the allocation calculation
+long.total = income.assets - ss.pv
+long.stocks = long.total * alloc_long
+long.bonds = long.total * (1-alloc_long)
+
+combined.stocks = short.stocks + long.stocks
+combined.bonds = short.bonds + long.bonds
+combined.total = combined.stocks + combined.bonds
+
+
+# +/- stocks should equal bonds, and total should be 0
+data.frame(
+  stocks = c(short.stocks, long.stocks, combined.stocks, stock_amount, stock_amount - combined.stocks),
+  other = c(short.bonds, long.bonds, combined.bonds, bond_amount, bond_amount - combined.bonds),
+  total = c(short.total, long.total, combined.total, total_amount, total_amount - combined.total),
+  allocation = c(short.stocks / short.total, long.stocks / long.total, combined.stocks / combined.total, stock_amount / total_amount, NA),
+  row.names = c("Short", "Long", "Combined", "Current", "+/-")
+)
+
+# oh, wait, but I don't HAVE the SS yet. That's weird
+# it comes out of income, and matches whatever allocation I use
+# 120k more into STOCKs, not just betterment. Get spending.
+# how about 10k a month? 5k per every 15 days. Sure.
+
+
+```
