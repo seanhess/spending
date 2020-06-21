@@ -69,11 +69,11 @@ ss
 Net Cash
 ```{r}
 cash = data.frame()
-cash["current", "amount"] = 20000+46000
-cash["income","amount"] = 170000
-cash["sell","amount"] = 17000
-cash["taxes","amount"] = -44000
-cash["2020", "amount"] = -15000
+cash["current", "amount"] = 20000+46000 # I left 9k in salary in MACU
+cash["income","amount"] = 170000 # left after taxes
+cash["sell","amount"] = 17000 # my trailer
+cash["taxes","amount"] = -44000 # currently owed
+cash["2020", "amount"] = -15000 # living Q3-Q4 30k/2. Spending is 8k for the rest of the year?
 cash
 ```
 
@@ -173,6 +173,11 @@ Withdrawal Amounts for Income and Kids.
 total.assets = sum(invest$stocks) + sum(invest$bonds) + sum(cash$amount) + ss.pv
 total.liabilities = sum(liabilities$pv)
 
+
+actual.assets = total.assets - ss.pv
+actual.liabilities = total.liabilities
+actual.withdrawal = rates.income * actual.assets
+
 # if you set aside kid liabilities and deplete them within 10y
 kids.liabilities = child_support.pv + housing_extra.pv
 kids.assets = -kids.liabilities
@@ -186,11 +191,11 @@ income.withdrawal = rates.income * income.assets
 income.funded = income.assets / -income.liabilities
 
 data.frame(
-  "assets" = c(kids.assets, income.assets),
-  "liabilities" = c(kids.liabilities, income.liabilities),
-  "withdrawal" = c(kids.withdrawal, income.withdrawal),
-  "funded ratio" = c(kids.funded, income.funded),
-  row.names = c("Next 10y Kid Expenses ", "Lifetime Income")
+  "assets" = c(total.assets, actual.assets, kids.assets, income.assets),
+  "liabilities" = c(total.liabilities, actual.liabilities, kids.liabilities, income.liabilities),
+  "withdrawal" = c(NA, actual.withdrawal, kids.withdrawal, income.withdrawal),
+  "funded ratio" = c(NA, NA, kids.funded, income.funded),
+  row.names = c("Total", "Actual", "Next 10y Kid Expenses", "Lifetime Income")
 )
 ```
 
